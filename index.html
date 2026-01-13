@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trade Master - V6 Smart Popup</title>
+    <title>Trade Master - V7 Compact</title>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
         body { background-color: #000; color: #ccc; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; font-size: 11px; }
@@ -44,7 +44,8 @@
         .btn-save { padding: 4px 12px; background: #e6b800; color: #000; border: none; font-weight: bold; border-radius: 3px; cursor: pointer; font-size: 10px; }
         .btn-save:hover { background: #ffcc00; }
 
-        .history-wrapper { width: 100%; max-width: 800px; overflow-x: auto; margin-top: 15px; padding-bottom: 50px; /* Thêm padding để popup cuối bảng không bị che */ }
+        /* HISTORY TABLE CUSTOMIZATION */
+        .history-wrapper { width: 100%; max-width: 800px; overflow-x: auto; margin-top: 15px; padding-bottom: 60px; }
         .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
         .history-title { color: #ffd54f; font-weight: bold; font-size: 11px; }
         
@@ -52,9 +53,9 @@
         th { background: #111; padding: 0; border: 1px solid #333; color: #666; height: 26px; overflow: hidden; }
         td { background: #080808; padding: 4px; border: 1px solid #222; color: #ccc; overflow: hidden; text-overflow: ellipsis; }
         
-        /* ĐIỀU CHỈNH ĐỘ RỘNG CỘT TẠI ĐÂY */
+        /* COLUMN WIDTHS */
         .col-check { width: 20px; }
-        .col-time { width: 115px; } /* Đã tăng lên để hiển thị đủ năm */
+        .col-time { width: 115px; } 
         .col-pair { width: 60px; }
         .col-pos { width: 45px; }
         .col-entry { width: 55px; }
@@ -62,12 +63,13 @@
         .col-tp { width: 55px; }
         .col-vol { width: 50px; }
         .col-lev { width: 30px; }
-        .col-res { width: 50px; }
+        .col-res { width: 35px; } /* ĐÃ THU NHỎ CÒN 35px */
         .col-pl { width: 55px; }
         .col-dur { width: 50px; }
         .col-note { width: auto; } 
 
-        .btn-mini { padding: 2px 6px; border-radius: 2px; border: 1px solid #333; background: #222; color: #ccc; cursor: pointer; font-size: 9px; margin: 0 1px; }
+        /* Nút W/L nhỏ gọn */
+        .btn-mini { padding: 2px 4px; border-radius: 2px; border: 1px solid #333; background: #222; color: #ccc; cursor: pointer; font-size: 9px; margin: 0 1px; min-width: 14px; }
         .filter-select { background: transparent; border: none; color: #666; font-weight: bold; font-size: 9px; width: 100%; height: 100%; cursor: pointer; text-align-last: center; outline: none; }
         
         .pair-link { color: #ffd54f; font-weight: bold; cursor: pointer; text-decoration: none; border-bottom: 1px dotted #ffd54f; transition: color 0.2s; }
@@ -83,10 +85,10 @@
         .spinner { border: 4px solid #333; border-top: 4px solid #e6b800; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* --- NEW POPUP STYLE --- */
+        /* POPUP STYLE */
         #dateModal { 
             display: none; 
-            position: absolute; /* Quan trọng để bay theo nút bấm */
+            position: absolute; 
             z-index: 9999; 
             background-color: #161616; 
             border: 1px solid #e6b800; 
@@ -323,7 +325,6 @@
         } catch (e) { return null; } 
     }
     
-    // --- POPUP POSITIONING LOGIC ---
     function openDateModal(index, status, event) { 
         pendingTradeIndex = index; pendingStatus = status; 
         
@@ -333,26 +334,23 @@
         input.value = getCurrentTimeString(); 
         modal.style.display = 'block'; 
 
-        // Tính vị trí popup dựa trên nút bấm
+        // Tính vị trí popup
         let rect = event.target.getBoundingClientRect();
         let scrollY = window.scrollY || window.pageYOffset;
         let scrollX = window.scrollX || window.pageXOffset;
         
-        // Hiện ngay bên dưới nút bấm
         modal.style.top = (rect.bottom + scrollY + 5) + 'px';
         
-        // Căn chỉnh để popup không bị tràn ra ngoài màn hình bên phải
-        let leftPos = rect.left + scrollX - 120; // Dịch sang trái một chút
+        let leftPos = rect.left + scrollX - 120; 
         if(leftPos < 10) leftPos = 10;
         modal.style.left = leftPos + 'px';
         
         input.focus();
-        event.stopPropagation(); // Ngăn click lan ra ngoài làm đóng popup ngay
+        event.stopPropagation();
     }
     
     function closeDateModal() { document.getElementById('dateModal').style.display = 'none'; pendingTradeIndex = -1; pendingStatus = ""; }
     
-    // Đóng popup khi click ra ngoài
     document.addEventListener('click', function(event) {
         let modal = document.getElementById('dateModal');
         if (modal.style.display === 'block' && !modal.contains(event.target)) {
@@ -393,8 +391,7 @@
         tradeData.forEach((t, index) => {
             let matchPair = (fPair === 'ALL') || (t.pair === fPair); let matchPos = (fPos === 'ALL') || (t.type === fPos); let status = t.result || 'PENDING'; let matchRes = (fRes === 'ALL') || (status === fRes);
             if (matchPair && matchPos && matchRes) {
-                // QUAN TRỌNG: Thêm 'event' vào onclick
-                let actionHtml = t.result==='WIN'?`<span style="color:#00e676;font-weight:bold;">WIN</span>`: t.result==='LOSS'?`<span style="color:#ff1744;font-weight:bold;">LOSS</span>`:`<button class="btn-mini" onclick="openDateModal(${index},'WIN', event)" style="color:#66bb6a">W</button><button class="btn-mini" onclick="openDateModal(${index},'LOSS', event)" style="color:#ef5350">L</button>`;
+                let actionHtml = t.result==='WIN'?`<span style="color:#00e676;font-weight:bold;">W</span>`: t.result==='LOSS'?`<span style="color:#ff1744;font-weight:bold;">L</span>`:`<button class="btn-mini" onclick="openDateModal(${index},'WIN', event)" style="color:#66bb6a; font-weight:bold;">W</button><button class="btn-mini" onclick="openDateModal(${index},'LOSS', event)" style="color:#ef5350; font-weight:bold;">L</button>`;
                 let plColor = '#ccc'; if (t.result === 'WIN') plColor = '#66bb6a'; else if (t.result === 'LOSS') plColor = '#ef5350';
                 let plText = t.result ? (t.result === 'WIN' ? `+${Number(t.realPL).toFixed(1)}` : `${Number(t.realPL).toFixed(1)}`) : '--';
                 let durText = (t.result && t.closeTime) ? formatDuration(t.closeTime - t.id) : "--";
