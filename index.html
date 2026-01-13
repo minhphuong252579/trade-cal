@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trade Master Pro - Cloud Sync</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: #000; color: #ccc; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; font-size: 11px; }
+        
+        .main-container { display: flex; gap: 12px; width: 100%; max-width: 800px; justify-content: center; align-items: stretch; }
+        .calculator-panel { flex: 1.4; background: #0f0f0f; border: 1px solid #333; border-radius: 4px; padding: 10px; display: flex; flex-direction: column; }
+        .side-panel { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+        
+        .fee-panel { background: #000; border: 1px solid #333; border-radius: 4px; padding: 10px; }
+        .f-title { font-weight: bold; color: #cd853f; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 8px; text-align: center; font-size: 11px; }
+        
+        .fee-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+        .fee-cell { background-color: #111; border: 1px solid #222; border-radius: 3px; padding: 4px 6px; display: flex; flex-direction: column; justify-content: center; min-height: 40px; position: relative; cursor: help; }
+        .fee-cell:hover::after { content: attr(data-formula); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #cd853f; color: #000; padding: 4px 8px; border-radius: 3px; white-space: nowrap; z-index: 100; font-weight: bold; font-size: 10px; }
+        
+        .label { font-size: 9px; color: #666; text-transform: uppercase; font-weight: 600; line-height: 1.2; }
+        .val { font-size: 13px; font-weight: 700; }
+        .c-gold { color: #ffd54f; } .c-red { color: #ef5350; } .c-green { color: #66bb6a; } .c-white { color: #eee; } .c-brown { color: #cd853f; }
+        
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+        .cell { background-color: #111; border: 1px solid #222; border-radius: 3px; padding: 2px 6px; display: flex; flex-direction: column; justify-content: center; min-height: 40px; position: relative; }
+        .cell-yellow { background-color: #2b2203 !important; border-color: #665205 !important; }
+        
+        .real-box { position: absolute; bottom: 2px; right: 2px; background: rgba(255,255,255,0.05); padding: 1px 5px; border-radius: 2px; font-size: 11.5px; font-weight: 700; }
+        .cell-risk-split { background-color: #160b0b !important; border-color: #2d1313 !important; padding: 0 !important; flex-direction: row !important; overflow: hidden; }
+        .risk-half { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 2px 6px; }
+        .risk-divider { width: 1px; background-color: #2d1313; height: 100%; }
+        
+        input { background: transparent; border: none; border-bottom: 1px solid #333; color: #eee; font-size: 13px; font-weight: 700; width: 100%; outline: none; padding: 0; height: 18px; }
+        input:focus { border-bottom-color: #cd853f; }
+        
+        .banner { text-align: center; font-weight: 800; text-transform: uppercase; font-size: 12px; padding: 6px; margin-bottom: 8px; border-radius: 3px; border: 1px solid #333; background: #1a1a1a; color: #555; }
+        .bg-long { background-color: #1b5e20 !important; color: #fff !important; border: 1px solid #4caf50 !important; }
+        .bg-short { background-color: #b71c1c !important; color: #fff !important; border: 1px solid #f44336 !important; }
+        
+        .footer-action { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 8px; border-top: 1px dashed #222; }
+        .btn-save { padding: 4px 12px; background: #e6b800; color: #000; border: none; font-weight: bold; border-radius: 3px; cursor: pointer; font-size: 10px; }
+        .btn-save:hover { background: #ffcc00; }
+
+        .history-wrapper { width: 100%; max-width: 800px; overflow-x: auto; margin-top: 15px; }
+        .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .history-title { color: #ffd54f; font-weight: bold; font-size: 11px; }
+        table { width: 100%; border-collapse: collapse; font-size: 10px; text-align: center; white-space: nowrap; border: 1px solid #333; }
+        th { background: #111; padding: 0; border: 1px solid #333; color: #666; height: 26px; }
+        td { background: #080808; padding: 4px; border: 1px solid #222; color: #ccc; }
+        
+        .btn-mini { padding: 2px 6px; border-radius: 2px; border: 1px solid #333; background: #222; color: #ccc; cursor: pointer; font-size: 9px; margin: 0 1px; }
+        .filter-select { background: transparent; border: none; color: #666; font-weight: bold; font-size: 10px; width: 100%; height: 100%; cursor: pointer; text-align-last: center; outline: none; }
+        
+        .pair-link { color: #ffd54f; font-weight: bold; cursor: pointer; text-decoration: none; border-bottom: 1px dotted #ffd54f; transition: color 0.2s; }
+        .pair-link:hover { color: #fff; border-bottom: 1px solid #fff; }
+
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); backdrop-filter: blur(2px); }
+        .modal-content { background-color: #111; border: 1px solid #333; border-radius: 4px; margin: 20% auto; padding: 15px; width: 260px; text-align: center; }
+        .modal-title { color: #e6b800; font-size: 12px; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; }
+        .modal-input { width: 100%; background: #000; border: 1px solid #444; color: #fff; padding: 6px; margin-bottom: 10px; border-radius: 3px; text-align: center; font-weight: bold; }
+        .modal-btn-group { display: flex; justify-content: center; gap: 8px; }
+        .modal-btn { padding: 6px 12px; border-radius: 3px; border: none; cursor: pointer; font-weight: bold; font-size: 10px; }
+        .btn-confirm { background: #e6b800; color: #000; }
+        .btn-cancel { background: #222; color: #888; border: 1px solid #333; }
+
+        /* LOADING SPINNER */
+        #loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; justify-content: center; align-items: center; flex-direction: column; }
+        .spinner { border: 4px solid #333; border-top: 4px solid #e6b800; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading-text { margin-top: 10px; color: #e6b800; font-weight: bold; font-size: 12px; }
+
+        @media (max-width: 768px) { .main-container { flex-direction: column; } }
+    </style>
+</head>
+<body>
+
+<div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Đang đồng bộ dữ liệu...</div>
+</div>
+
+<div class="main-container">
+    <div class="calculator-panel">
+        <div id="badge" class="banner">TRẠNG THÁI CHỜ</div>
+        <div class="grid-container">
+            <div class="cell"><span class="label">Cặp Coin</span><input list="coins" id="pair" placeholder="BTC"></div>
+            <div class="cell"><span class="label">Vốn (Balance)</span><input type="number" id="balance" value="5000" oninput="updateRiskFromPct()"></div>
+            <div class="cell cell-risk-split">
+                <div class="risk-half"><span class="label">Risk %</span><input type="number" id="riskPct" value="1.5" step="0.1" style="color:#ef5350; text-align:center;" oninput="updateRiskFromPct()"></div>
+                <div class="risk-divider"></div>
+                <div class="risk-half" id="box-risk-usd"><span class="label">Risk $</span><input type="number" id="riskUSD" step="0.1" style="color:#ef5350; text-align:center;" oninput="updateRiskFromUSD()"></div>
+            </div>
+            <div class="cell"><span class="label">Entry</span><input type="number" id="entry" placeholder="Giá vào" oninput="calc()"></div>
+            <div class="cell" id="box-lev"><span class="label">Đòn bẩy</span><span class="val c-gold" id="lev">x--</span></div>
+            <div class="cell cell-yellow" id="box-margin"><span class="label">Ký Quỹ</span><span class="val" id="marginReq">--</span></div>
+            <div class="cell"><span class="label">Stop Loss</span><input type="number" id="sl" placeholder="Cắt lỗ" oninput="calc()"></div>
+            <div class="cell" id="box-liq"><span class="label">Thanh Lý</span><span class="val c-gold" id="liq">--</span></div>
+            <div class="cell" id="box-vol"><span class="label" style="color:#fdd835">Volume ($)</span><span class="val c-white" id="qtyUSDT">--</span></div>
+            <div class="cell"><span class="label">Take Profit</span><input type="number" id="tp" placeholder="TP" oninput="calc()"></div>
+            <div class="cell" id="box-loss"><span class="label">Thua Lỗ</span><span class="val c-red" id="lossVal">--</span><div class="real-box c-red" id="real-loss">--</div></div>
+            <div class="cell" id="cell-profit"><span class="label">Lợi Nhuận</span><span class="val c-green" id="winVal">--</span><div class="real-box c-green" id="real-profit">--</div></div>
+        </div>
+        <div class="footer-action">
+            <div style="font-size:9px; color:#555; display:flex; gap:8px; align-items:center;">
+                <span>Mode: MM 0.65% + Buffer 2.0%</span>
+                <label style="cursor:pointer; display:flex; align-items:center; gap:3px; color:#777"><input type="checkbox" id="stormCheck" onchange="calc()" style="width:auto; height: 10px;"> ⛈️ Bão</label>
+            </div>
+            <button class="btn-save" onclick="saveTrade()">💾 Lưu & Sync</button>
+        </div>
+    </div>
+
+    <div class="side-panel">
+        <div class="fee-panel">
+            <div class="f-title">💹 CHI PHÍ (BINANCE)</div>
+            <div class="fee-grid">
+                <div class="fee-cell" data-formula="Vol * 0.018%"><span class="label">Mở Lệnh</span><span class="val c-white" id="fee-open">0.00$</span></div>
+                <div class="fee-cell" data-formula="Vol * 0.018%"><span class="label">Đóng Lệnh</span><span class="val c-white" id="fee-close">0.00$</span></div>
+                <div class="fee-cell" data-formula="Vol * 0.01%"><span class="label">Funding (8h)</span><span class="val c-white" id="fee-funding">0.00$</span></div>
+                <div class="fee-cell" style="border-color:#cd853f" data-formula="Cộng phí"><span class="label" style="color:#cd853f">Tổng Phí</span><span class="val c-brown" id="fee-total">0.00$</span></div>
+            </div>
+        </div>
+        <div class="fee-panel" style="margin-top:5px;">
+            <div class="f-title">📝 CÔNG THỨC TOÁN</div>
+            <div style="color:#888; font-size:10px; line-height:1.6; padding:0 5px;">
+                <div><b style="color:#cd853f">Lev Max</b> = 1 / (%SL + 0.65% + 2%)</div>
+                <div style="border-top:1px dashed #333; margin:4px 0;"></div>
+                <div><b style="color:#ffd54f">Volume</b> = Risk $ / |Entry - SL| * Entry</div>
+                <div style="border-top:1px dashed #333; margin:4px 0;"></div>
+                <div><b style="color:#ef5350">Liq Price</b> = Entry ± (Entry/Lev) * (1 - 0.65%)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="history-wrapper">
+    <div class="history-header"><div class="history-title">📔 NHẬT KÝ GIAO DỊCH (CLOUD SYNC)</div>
+        <div style="display: flex; gap: 4px;">
+            <button class="btn-mini" onclick="resetFilters()">🔄 Tất Cả</button>
+            <button class="btn-mini" onclick="deleteSelected()">🗑️ Xóa</button>
+        </div>
+    </div>
+    <table id="tradeTable">
+        <thead>
+            <tr>
+                <th><input type="checkbox" id="selectAll" onchange="toggleAll()" style="width:auto"></th>
+                <th>Time (Start)</th>
+                <th style="min-width: 70px;"><select id="filter-pair" class="filter-select" onchange="renderTable()"><option value="ALL">Pair</option></select></th>
+                <th style="min-width: 50px;"><select id="filter-pos" class="filter-select" onchange="renderTable()"><option value="ALL">Pos</option><option value="LONG">LONG</option><option value="SHORT">SHORT</option></select></th>
+                <th>Entry</th><th>SL</th><th>TP</th><th>Vol($)</th><th>Lev</th>
+                <th style="min-width: 60px;"><select id="filter-res" class="filter-select" onchange="renderTable()"><option value="ALL">Res</option><option value="WIN">WIN</option><option value="LOSS">LOSS</option><option value="PENDING">WAIT</option></select></th>
+                <th>P/L</th>
+                <th>Duration</th>
+                <th>Note</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+    <datalist id="coins"><option value="BTC/USDT"><option value="ETH/USDT"><option value="SOL/USDT"><option value="BNB/USDT"><option value="AVAX/USDT"></datalist>
+</div>
+
+<div id="dateModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-title">⏰ Thời gian đóng lệnh</div>
+        <p style="font-size:9px; color:#666; margin-bottom:5px;">Định dạng: HH:mm DD/MM/YYYY</p>
+        <input type="text" id="manualTimeInput" class="modal-input" placeholder="Ví dụ: 13:30 31/12/2025">
+        <div class="modal-btn-group">
+            <button class="modal-btn btn-cancel" onclick="closeDateModal()">Hủy</button>
+            <button class="modal-btn btn-confirm" onclick="confirmCloseTrade()">Xác nhận</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- CẤU HÌNH API ---
+    // HÃY THAY LINK DƯỚI ĐÂY BẰNG LINK WEB APP CỦA BẠN
+    const API_URL = "https://script.google.com/macros/s/AKfycbyy8zi2wyVaIXgtr5Nd1iYa-KcwnO-A0cGxVfWfkCOV_TMnJMzRwf2H0w0WsyZ549e6Ig/exec"; 
+
+    let tradeData = [];
+    let pendingTradeIndex = -1; let pendingStatus = "";     
+    const MMR = 0.0065; 
+    const FEE_MAKER = 0.00018, FUNDING = 0.0001; 
+
+    function setLoading(isLoading) { document.getElementById('loading-overlay').style.display = isLoading ? 'flex' : 'none'; }
+
+    // --- API FUNCTIONS ---
+    async function fetchData() {
+        setLoading(true);
+        try {
+            const res = await fetch(API_URL);
+            const data = await res.json();
+            tradeData = data;
+            updatePairFilter(); renderTable();
+        } catch (e) { alert("Lỗi tải dữ liệu! Kiểm tra mạng."); console.error(e); }
+        setLoading(false);
+    }
+
+    async function sendData(action, dataItem) {
+        setLoading(true);
+        try {
+            await fetch(API_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action, data: dataItem })
+            });
+            // Sau khi gửi xong, tải lại dữ liệu để đồng bộ
+            await fetchData(); 
+        } catch (e) { alert("Lỗi gửi dữ liệu!"); console.error(e); setLoading(false); }
+    }
+
+    // FORMAT & UTILS
+    function formatDuration(ms) {
+        if (!ms || ms < 0) return "--";
+        let sec = Math.floor(ms / 1000); let min = Math.floor(sec / 60); let hour = Math.floor(min / 60); let day = Math.floor(hour / 24);
+        if (day > 0) return `${day}d ${hour % 24}h`; if (hour > 0) return `${hour}h ${min % 60}m`; if (min > 0) return `${min}m ${sec % 60}s`; return `${sec}s`;
+    }
+    function getCurrentTimeString() {
+        let now = new Date(); let d = String(now.getDate()).padStart(2, '0'); let m = String(now.getMonth() + 1).padStart(2, '0'); let y = now.getFullYear(); let h = String(now.getHours()).padStart(2, '0'); let min = String(now.getMinutes()).padStart(2, '0'); return `${h}:${min} ${d}/${m}/${y}`;
+    }
+    function parseCustomDate(str) { try { let parts = str.split(' '); let timeParts = parts[0].split(':'); let dateParts = parts[1].split('/'); let hour = parseInt(timeParts[0]); let min = parseInt(timeParts[1]); let day = parseInt(dateParts[0]); let month = parseInt(dateParts[1]) - 1; let year = parseInt(dateParts[2]); return new Date(year, month, day, hour, min).getTime(); } catch (e) { return null; } }
+    
+    // MODAL LOGIC
+    function openDateModal(index, status) { pendingTradeIndex = index; pendingStatus = status; document.getElementById('manualTimeInput').value = getCurrentTimeString(); document.getElementById('dateModal').style.display = 'block'; document.getElementById('manualTimeInput').focus(); }
+    function closeDateModal() { document.getElementById('dateModal').style.display = 'none'; pendingTradeIndex = -1; pendingStatus = ""; }
+    
+    function confirmCloseTrade() { 
+        if (pendingTradeIndex === -1) return; 
+        let inputStr = document.getElementById('manualTimeInput').value; let closeTime = parseCustomDate(inputStr); 
+        if (!closeTime || isNaN(closeTime)) { alert("⚠️ Định dạng sai!"); return; } 
+        let trade = tradeData[pendingTradeIndex]; 
+        if (closeTime < trade.id) { alert("⚠️ Lỗi: Thời gian đóng trước thời gian mở!"); return; } 
+        
+        trade.closeTime = closeTime; trade.result = pendingStatus; 
+        let durationMs = trade.closeTime - trade.id;
+        let fundingIntervals = Math.ceil(durationMs / 28800000); 
+        if (fundingIntervals < 1) fundingIntervals = 1;
+
+        let totalFee = parseFloat(trade.vol) * (FEE_MAKER * 2 + (FUNDING * fundingIntervals)); 
+        
+        if (pendingStatus === 'WIN') {
+            let grossProfit = trade.projectedProfit > 0 ? trade.projectedProfit : trade.risk;
+            trade.realPL = grossProfit - totalFee;
+        } else if (pendingStatus === 'LOSS') {
+            trade.realPL = -trade.risk - totalFee;
+        }
+        
+        closeDateModal(); 
+        // Gửi lệnh Update lên Cloud
+        sendData('update', trade);
+    }
+
+    // RISK & CALC
+    function updateRiskFromPct() { let bal = parseFloat(document.getElementById('balance').value) || 0; let pct = parseFloat(document.getElementById('riskPct').value) || 0; document.getElementById('riskUSD').value = (bal * (pct / 100)).toFixed(1); calc(); }
+    function updateRiskFromUSD() { let bal = parseFloat(document.getElementById('balance').value) || 0; let usd = parseFloat(document.getElementById('riskUSD').value) || 0; if (bal > 0) document.getElementById('riskPct').value = ((usd / bal) * 100).toFixed(2); calc(); }
+
+    function calc() {
+        let bal = parseFloat(document.getElementById('balance').value)||0;
+        let riskDollar = parseFloat(document.getElementById('riskUSD').value)||0;
+        let entry = parseFloat(document.getElementById('entry').value)||0;
+        let sl = parseFloat(document.getElementById('sl').value)||0;
+        let tp = parseFloat(document.getElementById('tp').value)||0;
+        let isStorm = document.getElementById('stormCheck').checked;
+
+        document.getElementById('lossVal').innerText = "-" + riskDollar.toFixed(1) + "$";
+
+        if (entry > 0 && sl > 0 && entry !== sl) {
+            let isLong = entry > sl;
+            let badge = document.getElementById('badge');
+            if(isLong) { badge.innerText = "LONG (MUA)"; badge.className = "banner bg-long"; }
+            else { badge.innerText = "SHORT (BÁN)"; badge.className = "banner bg-short"; }
+
+            let dist = Math.abs(entry - sl);
+            let qty = riskDollar / dist; let finalQty = Math.floor(qty * 1000) / 1000;
+            let positionValue = finalQty * entry;
+
+            let BUFFER = 0.02; if (isStorm) BUFFER = 0.03; 
+            let slPct = dist / entry; 
+            let safeLiqDist = slPct + MMR + BUFFER;
+            let optLev = Math.floor(1 / safeLiqDist);
+            if(optLev > 50) optLev = 50; if(optLev < 1) optLev = 1;
+
+            document.getElementById('qtyUSDT').innerText = Math.round(positionValue).toLocaleString() + " $";
+            document.getElementById('lev').innerText = "x" + optLev;
+            document.getElementById('marginReq').innerText = (positionValue / optLev).toFixed(1) + "$";
+
+            let liq = isLong ? entry - (entry / optLev) * (1 - MMR) : entry + (entry / optLev) * (1 - MMR);
+            document.getElementById('liq').innerText = liq.toFixed(2);
+
+            let fOpen = positionValue * FEE_MAKER; let fClose = positionValue * FEE_MAKER; let fFund = positionValue * FUNDING; 
+            let fTotal = fOpen + fClose + fFund;
+
+            document.getElementById('fee-open').innerText = fOpen.toFixed(2) + "$";
+            document.getElementById('fee-close').innerText = fClose.toFixed(2) + "$";
+            document.getElementById('fee-funding').innerText = fFund.toFixed(2) + "$";
+            document.getElementById('fee-total').innerText = fTotal.toFixed(2) + "$";
+            document.getElementById('real-loss').innerText = (-(riskDollar + fTotal)).toFixed(1) + "$";
+
+            let profitEl = document.getElementById('winVal');
+            let profitCell = document.getElementById('cell-profit'); // Đã sửa ID ở đây
+            
+            if(tp > 0) {
+                let rawProfit = isLong ? (tp - entry) * finalQty : (entry - tp) * finalQty;
+                let realProfit = rawProfit - fTotal;
+                document.getElementById('real-profit').innerText = (realProfit > 0 ? "+" : "") + realProfit.toFixed(1) + "$";
+                if (rawProfit > 0) { profitEl.innerText = "+" + rawProfit.toFixed(1) + "$"; profitEl.className = "val c-green"; if(profitCell) profitCell.classList.remove('blink-alert'); } 
+                else { profitEl.innerText = rawProfit.toFixed(1) + "$"; profitEl.className = "val c-red"; if(profitCell) profitCell.classList.add('blink-alert'); }
+            } else { 
+                profitEl.innerText = "--"; document.getElementById('real-profit').innerText = "--"; if(profitCell) profitCell.classList.remove('blink-alert'); 
+            }
+        } else {
+            document.getElementById('badge').className = "banner"; document.getElementById('badge').innerText = "TRẠNG THÁI CHỜ"; document.getElementById('badge').style.background = "#1a1a1a"; document.getElementById('cell-profit').classList.remove('blink-alert');
+        }
+    }
+
+    function saveTrade() {
+        let entry = parseFloat(document.getElementById('entry').value);
+        let sl = parseFloat(document.getElementById('sl').value);
+        let tp = parseFloat(document.getElementById('tp').value)||0;
+        let riskVal = parseFloat(document.getElementById('riskUSD').value);
+        if (!entry || !sl) { alert("⚠️ Nhập Entry & SL!"); return; }
+        let pair = document.getElementById('pair').value.toUpperCase() || "UNK";
+        let volUSD = document.getElementById('qtyUSDT').innerText.replace(' $','').replace(/,/g,'');
+        let lev = document.getElementById('lev').innerText;
+        let type = (entry > sl) ? "LONG" : "SHORT";
+        let projectedProfit = 0;
+        if (tp > 0) {
+            let dist = Math.abs(entry - sl); let qty = riskVal / dist; 
+            projectedProfit = type === "LONG" ? (tp - entry) * qty : (entry - tp) * qty;
+        }
+        let trade = { id: Date.now(), time: getCurrentTimeString(), pair: pair, type: type, entry: entry, sl: sl, tp: tp, vol: volUSD, lev: lev, risk: riskVal, projectedProfit: projectedProfit, result: null, realPL: 0, note: "", closeTime: null };
+        
+        // Gửi lên Cloud
+        sendData('add', trade);
+    }
+
+    function updateNote(index, value) { 
+        let t = tradeData[index];
+        t.note = value;
+        sendData('update', t);
+    }
+    
+    function toggleAll(){ let c=document.getElementById('selectAll').checked; document.querySelectorAll('.row-check').forEach(cb=>cb.checked=c); }
+    
+    function deleteSelected(){ 
+        let c=document.querySelectorAll('.row-check:checked'); 
+        if(c.length==0)return; 
+        if(confirm(`Xóa vĩnh viễn ${c.length} lệnh?`)){ 
+            let ids=Array.from(c).map(cb=>parseInt(cb.getAttribute('data-id'))); // Lấy ID thực
+            sendData('delete', ids);
+        } 
+    }
+    
+    function resetFilters() { document.getElementById('filter-pair').value = 'ALL'; document.getElementById('filter-pos').value = 'ALL'; document.getElementById('filter-res').value = 'ALL'; renderTable(); }
+    function updatePairFilter() { let select = document.getElementById('filter-pair'); let currentVal = select.value; let pairs = [...new Set(tradeData.map(t => t.pair))].sort(); select.innerHTML = '<option value="ALL">Pair</option>'; pairs.forEach(p => { let option = document.createElement('option'); option.value = p; option.text = p; select.appendChild(option); }); if (pairs.includes(currentVal)) select.value = currentVal; }
+
+    function renderTable() {
+        let tbody = document.getElementById('tableBody'); tbody.innerHTML = "";
+        let fPair = document.getElementById('filter-pair').value; let fPos = document.getElementById('filter-pos').value; let fRes = document.getElementById('filter-res').value;
+        tradeData.forEach((t, index) => {
+            let matchPair = (fPair === 'ALL') || (t.pair === fPair); let matchPos = (fPos === 'ALL') || (t.type === fPos); let status = t.result || 'PENDING'; let matchRes = (fRes === 'ALL') || (status === fRes);
+            if (matchPair && matchPos && matchRes) {
+                let actionHtml = t.result==='WIN'?`<span style="color:#00e676;font-weight:bold;">WIN</span>`: t.result==='LOSS'?`<span style="color:#ff1744;font-weight:bold;">LOSS</span>`:`<button class="btn-mini" onclick="openDateModal(${index},'WIN')" style="color:#66bb6a">W</button><button class="btn-mini" onclick="openDateModal(${index},'LOSS')" style="color:#ef5350">L</button>`;
+                
+                let plColor = '#ccc'; if (t.result === 'WIN') plColor = '#66bb6a'; else if (t.result === 'LOSS') plColor = '#ef5350';
+                let plText = t.result ? (t.result === 'WIN' ? `+${Number(t.realPL).toFixed(1)}` : `${Number(t.realPL).toFixed(1)}`) : '--';
+                let durText = (t.result && t.closeTime) ? formatDuration(t.closeTime - t.id) : "--";
+                
+                // Lưu ý: data-id là ID thực của lệnh để dùng cho việc xóa/sửa
+                let row = `<tr><td><input type="checkbox" class="row-check" data-id="${t.id}" style="width:auto"></td><td>${t.time}</td><td class="pair-link" onclick="loadTrade(${index})" title="Load lại lệnh này">${t.pair}</td><td class="${t.type==='LONG'?'pl-win':'pl-loss'}">${t.type}</td><td>${t.entry}</td><td>${t.sl}</td><td>${t.tp||''}</td><td>${Number(t.vol).toLocaleString()}</td><td>${t.lev}</td><td>${actionHtml}</td><td style="color:${plColor}; font-weight:bold;">${plText}</td><td class="col-duration">${durText}</td><td><input type="text" class="note-input" value="${t.note||''}" placeholder="..." onchange="updateNote(${index},this.value)"></td></tr>`;
+                tbody.innerHTML += row;
+            }
+        }); document.getElementById('selectAll').checked=false;
+    }
+
+    function loadTrade(index) {
+        let t = tradeData[index]; if (!t) return;
+        document.getElementById('pair').value = t.pair; document.getElementById('entry').value = t.entry;
+        document.getElementById('sl').value = t.sl; document.getElementById('tp').value = t.tp || "";
+        document.getElementById('riskUSD').value = t.risk;
+        updateRiskFromUSD(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    window.onload = function(){ 
+        updateRiskFromPct(); 
+        fetchData(); // Tải dữ liệu từ Google Sheet khi mở web
+    }
+</script>
+</body>
+</html>
