@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trade Master Pro - Cloud Sync</title>
+    <title>Trade Master - Speed Sync V3</title>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
         body { background-color: #000; color: #ccc; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; font-size: 11px; }
@@ -65,20 +65,26 @@
         .btn-confirm { background: #e6b800; color: #000; }
         .btn-cancel { background: #222; color: #888; border: 1px solid #333; }
 
-        /* LOADING SPINNER */
-        #loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; justify-content: center; align-items: center; flex-direction: column; }
+        /* LOADING & STATUS */
+        #sync-status { font-size: 10px; font-weight: bold; margin-right: 10px; transition: color 0.3s; }
+        .status-syncing { color: #ffd54f; animation: pulse 1s infinite; }
+        .status-done { color: #66bb6a; }
+        .status-error { color: #ef5350; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        /* INITIAL LOADING OVERLAY ONLY */
+        #init-loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 2000; display: flex; justify-content: center; align-items: center; flex-direction: column; }
         .spinner { border: 4px solid #333; border-top: 4px solid #e6b800; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .loading-text { margin-top: 10px; color: #e6b800; font-weight: bold; font-size: 12px; }
 
         @media (max-width: 768px) { .main-container { flex-direction: column; } }
     </style>
 </head>
 <body>
 
-<div id="loading-overlay">
+<div id="init-loader">
     <div class="spinner"></div>
-    <div class="loading-text">Đang đồng bộ dữ liệu...</div>
+    <div style="color:#666; margin-top:10px; font-size:10px;">Đang tải dữ liệu...</div>
 </div>
 
 <div class="main-container">
@@ -104,10 +110,10 @@
         </div>
         <div class="footer-action">
             <div style="font-size:9px; color:#555; display:flex; gap:8px; align-items:center;">
-                <span>Mode: MM 0.65% + Buffer 2.0%</span>
+                <span id="sync-status"></span>
                 <label style="cursor:pointer; display:flex; align-items:center; gap:3px; color:#777"><input type="checkbox" id="stormCheck" onchange="calc()" style="width:auto; height: 10px;"> ⛈️ Bão</label>
             </div>
-            <button class="btn-save" onclick="saveTrade()">💾 Lưu & Sync</button>
+            <button class="btn-save" onclick="saveTrade()">💾 Lưu</button>
         </div>
     </div>
 
@@ -139,6 +145,7 @@
         <div style="display: flex; gap: 4px;">
             <button class="btn-mini" onclick="resetFilters()">🔄 Tất Cả</button>
             <button class="btn-mini" onclick="deleteSelected()">🗑️ Xóa</button>
+            <button class="btn-mini" onclick="exportToExcel()">📊 Excel</button>
         </div>
     </div>
     <table id="tradeTable">
@@ -174,7 +181,7 @@
 
 <script>
     // --- CẤU HÌNH API ---
-    // HÃY THAY LINK DƯỚI ĐÂY BẰNG LINK WEB APP CỦA BẠN
+    // THAY LINK API MỚI VÀO ĐÂY
     const API_URL = "https://script.google.com/macros/s/AKfycbyy8zi2wyVaIXgtr5Nd1iYa-KcwnO-A0cGxVfWfkCOV_TMnJMzRwf2H0w0WsyZ549e6Ig/exec"; 
 
     let tradeData = [];
@@ -182,49 +189,101 @@
     const MMR = 0.0065; 
     const FEE_MAKER = 0.00018, FUNDING = 0.0001; 
 
-    function setLoading(isLoading) { document.getElementById('loading-overlay').style.display = isLoading ? 'flex' : 'none'; }
+    // --- API & SYNC LOGIC ---
+    // Chỉ hiện Loader khi mới mở web
+    function setInitLoading(isLoading) { 
+        document.getElementById('init-loader').style.display = isLoading ? 'flex' : 'none'; 
+    }
+    
+    // Status Text nhỏ ở góc dưới thay vì Loading to
+    function setSyncStatus(status) {
+        let el = document.getElementById('sync-status');
+        if(status === 'sending') { el.innerText = "Đang đồng bộ..."; el.className = "status-syncing"; }
+        else if(status === 'done') { el.innerText = "Đã lưu Cloud"; el.className = "status-done"; setTimeout(()=>{el.innerText="";}, 3000); }
+        else if(status === 'error') { el.innerText = "Lỗi mạng!"; el.className = "status-error"; }
+    }
 
-    // --- API FUNCTIONS ---
     async function fetchData() {
-        setLoading(true);
+        setInitLoading(true);
         try {
             const res = await fetch(API_URL);
             const data = await res.json();
             tradeData = data;
             updatePairFilter(); renderTable();
-        } catch (e) { alert("Lỗi tải dữ liệu! Kiểm tra mạng."); console.error(e); }
-        setLoading(false);
+        } catch (e) { alert("Lỗi tải dữ liệu! Kiểm tra kết nối."); console.error(e); }
+        setInitLoading(false);
     }
 
-    async function sendData(action, dataItem) {
-        setLoading(true);
-        try {
-            await fetch(API_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: action, data: dataItem })
-            });
-            // Sau khi gửi xong, tải lại dữ liệu để đồng bộ
-            await fetchData(); 
-        } catch (e) { alert("Lỗi gửi dữ liệu!"); console.error(e); setLoading(false); }
+    // Gửi ngầm (Background Sync)
+    function sendDataBackground(action, dataItem) {
+        setSyncStatus('sending');
+        fetch(API_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action, data: dataItem })
+        }).then(() => {
+            setSyncStatus('done');
+        }).catch((e) => {
+            console.error(e);
+            setSyncStatus('error');
+            alert("⚠️ Lỗi: Không thể lưu lên Cloud. Kiểm tra mạng!");
+        });
     }
 
-    // FORMAT & UTILS
-    function formatDuration(ms) {
-        if (!ms || ms < 0) return "--";
-        let sec = Math.floor(ms / 1000); let min = Math.floor(sec / 60); let hour = Math.floor(min / 60); let day = Math.floor(hour / 24);
-        if (day > 0) return `${day}d ${hour % 24}h`; if (hour > 0) return `${hour}h ${min % 60}m`; if (min > 0) return `${min}m ${sec % 60}s`; return `${sec}s`;
+    // --- CORE LOGIC ---
+    function saveTrade() {
+        let entry = parseFloat(document.getElementById('entry').value);
+        let sl = parseFloat(document.getElementById('sl').value);
+        let tp = parseFloat(document.getElementById('tp').value)||0;
+        let riskVal = parseFloat(document.getElementById('riskUSD').value);
+        if (!entry || !sl) { alert("⚠️ Nhập Entry & SL!"); return; }
+        
+        let pair = document.getElementById('pair').value.toUpperCase() || "UNK";
+        let volUSD = document.getElementById('qtyUSDT').innerText.replace(' $','').replace(/,/g,'');
+        let lev = document.getElementById('lev').innerText;
+        let type = (entry > sl) ? "LONG" : "SHORT";
+        let projectedProfit = 0;
+        if (tp > 0) {
+            let dist = Math.abs(entry - sl); let qty = riskVal / dist; 
+            projectedProfit = type === "LONG" ? (tp - entry) * qty : (entry - tp) * qty;
+        }
+        
+        // 1. TẠO DATA
+        let trade = { id: Date.now(), time: getCurrentTimeString(), pair: pair, type: type, entry: entry, sl: sl, tp: tp, vol: volUSD, lev: lev, risk: riskVal, projectedProfit: projectedProfit, result: null, realPL: 0, note: "", closeTime: null };
+        
+        // 2. CẬP NHẬT UI NGAY LẬP TỨC (OPTIMISTIC)
+        tradeData.unshift(trade); 
+        updatePairFilter(); 
+        renderTable(); 
+        
+        // 3. GỬI NGẦM
+        sendDataBackground('add', trade);
     }
-    function getCurrentTimeString() {
-        let now = new Date(); let d = String(now.getDate()).padStart(2, '0'); let m = String(now.getMonth() + 1).padStart(2, '0'); let y = now.getFullYear(); let h = String(now.getHours()).padStart(2, '0'); let min = String(now.getMinutes()).padStart(2, '0'); return `${h}:${min} ${d}/${m}/${y}`;
+
+    function updateNote(index, value) { 
+        let t = tradeData[index];
+        t.note = value;
+        // Không render lại bảng để tránh mất focus khi đang gõ
+        sendDataBackground('update', t);
     }
-    function parseCustomDate(str) { try { let parts = str.split(' '); let timeParts = parts[0].split(':'); let dateParts = parts[1].split('/'); let hour = parseInt(timeParts[0]); let min = parseInt(timeParts[1]); let day = parseInt(dateParts[0]); let month = parseInt(dateParts[1]) - 1; let year = parseInt(dateParts[2]); return new Date(year, month, day, hour, min).getTime(); } catch (e) { return null; } }
-    
-    // MODAL LOGIC
-    function openDateModal(index, status) { pendingTradeIndex = index; pendingStatus = status; document.getElementById('manualTimeInput').value = getCurrentTimeString(); document.getElementById('dateModal').style.display = 'block'; document.getElementById('manualTimeInput').focus(); }
-    function closeDateModal() { document.getElementById('dateModal').style.display = 'none'; pendingTradeIndex = -1; pendingStatus = ""; }
-    
+
+    function deleteSelected(){ 
+        let c=document.querySelectorAll('.row-check:checked'); 
+        if(c.length==0)return; 
+        if(confirm(`Xóa vĩnh viễn ${c.length} lệnh?`)){ 
+            let idsToDelete = Array.from(c).map(cb=>parseInt(cb.getAttribute('data-id')));
+            let indexesToDelete = Array.from(c).map(cb=>parseInt(cb.getAttribute('data-index')));
+            
+            // Xóa UI ngay
+            tradeData = tradeData.filter((_, i) => !indexesToDelete.includes(i));
+            renderTable();
+            
+            // Gửi xóa ngầm
+            sendDataBackground('delete', idsToDelete);
+        } 
+    }
+
     function confirmCloseTrade() { 
         if (pendingTradeIndex === -1) return; 
         let inputStr = document.getElementById('manualTimeInput').value; let closeTime = parseCustomDate(inputStr); 
@@ -247,11 +306,24 @@
         }
         
         closeDateModal(); 
-        // Gửi lệnh Update lên Cloud
-        sendData('update', trade);
+        renderTable(); // Update UI ngay
+        sendDataBackground('update', trade); // Gửi ngầm
     }
 
-    // RISK & CALC
+    // --- OTHER UTILS & EXPORT ---
+    function formatDuration(ms) {
+        if (!ms || ms < 0) return "--";
+        let sec = Math.floor(ms / 1000); let min = Math.floor(sec / 60); let hour = Math.floor(min / 60); let day = Math.floor(hour / 24);
+        if (day > 0) return `${day}d ${hour % 24}h`; if (hour > 0) return `${hour}h ${min % 60}m`; if (min > 0) return `${min}m ${sec % 60}s`; return `${sec}s`;
+    }
+    function getCurrentTimeString() {
+        let now = new Date(); let d = String(now.getDate()).padStart(2, '0'); let m = String(now.getMonth() + 1).padStart(2, '0'); let y = now.getFullYear(); let h = String(now.getHours()).padStart(2, '0'); let min = String(now.getMinutes()).padStart(2, '0'); return `${h}:${min} ${d}/${m}/${y}`;
+    }
+    function parseCustomDate(str) { try { let parts = str.split(' '); let timeParts = parts[0].split(':'); let dateParts = parts[1].split('/'); let hour = parseInt(timeParts[0]); let min = parseInt(timeParts[1]); let day = parseInt(dateParts[0]); let month = parseInt(dateParts[1]) - 1; let year = parseInt(dateParts[2]); return new Date(year, month, day, hour, min).getTime(); } catch (e) { return null; } }
+    
+    function openDateModal(index, status) { pendingTradeIndex = index; pendingStatus = status; document.getElementById('manualTimeInput').value = getCurrentTimeString(); document.getElementById('dateModal').style.display = 'block'; document.getElementById('manualTimeInput').focus(); }
+    function closeDateModal() { document.getElementById('dateModal').style.display = 'none'; pendingTradeIndex = -1; pendingStatus = ""; }
+    
     function updateRiskFromPct() { let bal = parseFloat(document.getElementById('balance').value) || 0; let pct = parseFloat(document.getElementById('riskPct').value) || 0; document.getElementById('riskUSD').value = (bal * (pct / 100)).toFixed(1); calc(); }
     function updateRiskFromUSD() { let bal = parseFloat(document.getElementById('balance').value) || 0; let usd = parseFloat(document.getElementById('riskUSD').value) || 0; if (bal > 0) document.getElementById('riskPct').value = ((usd / bal) * 100).toFixed(2); calc(); }
 
@@ -262,7 +334,6 @@
         let sl = parseFloat(document.getElementById('sl').value)||0;
         let tp = parseFloat(document.getElementById('tp').value)||0;
         let isStorm = document.getElementById('stormCheck').checked;
-
         document.getElementById('lossVal').innerText = "-" + riskDollar.toFixed(1) + "$";
 
         if (entry > 0 && sl > 0 && entry !== sl) {
@@ -274,7 +345,6 @@
             let dist = Math.abs(entry - sl);
             let qty = riskDollar / dist; let finalQty = Math.floor(qty * 1000) / 1000;
             let positionValue = finalQty * entry;
-
             let BUFFER = 0.02; if (isStorm) BUFFER = 0.03; 
             let slPct = dist / entry; 
             let safeLiqDist = slPct + MMR + BUFFER;
@@ -284,21 +354,16 @@
             document.getElementById('qtyUSDT').innerText = Math.round(positionValue).toLocaleString() + " $";
             document.getElementById('lev').innerText = "x" + optLev;
             document.getElementById('marginReq').innerText = (positionValue / optLev).toFixed(1) + "$";
-
             let liq = isLong ? entry - (entry / optLev) * (1 - MMR) : entry + (entry / optLev) * (1 - MMR);
             document.getElementById('liq').innerText = liq.toFixed(2);
-
             let fOpen = positionValue * FEE_MAKER; let fClose = positionValue * FEE_MAKER; let fFund = positionValue * FUNDING; 
             let fTotal = fOpen + fClose + fFund;
-
             document.getElementById('fee-open').innerText = fOpen.toFixed(2) + "$";
             document.getElementById('fee-close').innerText = fClose.toFixed(2) + "$";
             document.getElementById('fee-funding').innerText = fFund.toFixed(2) + "$";
             document.getElementById('fee-total').innerText = fTotal.toFixed(2) + "$";
             document.getElementById('real-loss').innerText = (-(riskDollar + fTotal)).toFixed(1) + "$";
-
-            let profitEl = document.getElementById('winVal');
-            let profitCell = document.getElementById('cell-profit'); // Đã sửa ID ở đây
+            let profitEl = document.getElementById('winVal'); let profitCell = document.getElementById('cell-profit');
             
             if(tp > 0) {
                 let rawProfit = isLong ? (tp - entry) * finalQty : (entry - tp) * finalQty;
@@ -313,45 +378,8 @@
             document.getElementById('badge').className = "banner"; document.getElementById('badge').innerText = "TRẠNG THÁI CHỜ"; document.getElementById('badge').style.background = "#1a1a1a"; document.getElementById('cell-profit').classList.remove('blink-alert');
         }
     }
-
-    function saveTrade() {
-        let entry = parseFloat(document.getElementById('entry').value);
-        let sl = parseFloat(document.getElementById('sl').value);
-        let tp = parseFloat(document.getElementById('tp').value)||0;
-        let riskVal = parseFloat(document.getElementById('riskUSD').value);
-        if (!entry || !sl) { alert("⚠️ Nhập Entry & SL!"); return; }
-        let pair = document.getElementById('pair').value.toUpperCase() || "UNK";
-        let volUSD = document.getElementById('qtyUSDT').innerText.replace(' $','').replace(/,/g,'');
-        let lev = document.getElementById('lev').innerText;
-        let type = (entry > sl) ? "LONG" : "SHORT";
-        let projectedProfit = 0;
-        if (tp > 0) {
-            let dist = Math.abs(entry - sl); let qty = riskVal / dist; 
-            projectedProfit = type === "LONG" ? (tp - entry) * qty : (entry - tp) * qty;
-        }
-        let trade = { id: Date.now(), time: getCurrentTimeString(), pair: pair, type: type, entry: entry, sl: sl, tp: tp, vol: volUSD, lev: lev, risk: riskVal, projectedProfit: projectedProfit, result: null, realPL: 0, note: "", closeTime: null };
-        
-        // Gửi lên Cloud
-        sendData('add', trade);
-    }
-
-    function updateNote(index, value) { 
-        let t = tradeData[index];
-        t.note = value;
-        sendData('update', t);
-    }
     
     function toggleAll(){ let c=document.getElementById('selectAll').checked; document.querySelectorAll('.row-check').forEach(cb=>cb.checked=c); }
-    
-    function deleteSelected(){ 
-        let c=document.querySelectorAll('.row-check:checked'); 
-        if(c.length==0)return; 
-        if(confirm(`Xóa vĩnh viễn ${c.length} lệnh?`)){ 
-            let ids=Array.from(c).map(cb=>parseInt(cb.getAttribute('data-id'))); // Lấy ID thực
-            sendData('delete', ids);
-        } 
-    }
-    
     function resetFilters() { document.getElementById('filter-pair').value = 'ALL'; document.getElementById('filter-pos').value = 'ALL'; document.getElementById('filter-res').value = 'ALL'; renderTable(); }
     function updatePairFilter() { let select = document.getElementById('filter-pair'); let currentVal = select.value; let pairs = [...new Set(tradeData.map(t => t.pair))].sort(); select.innerHTML = '<option value="ALL">Pair</option>'; pairs.forEach(p => { let option = document.createElement('option'); option.value = p; option.text = p; select.appendChild(option); }); if (pairs.includes(currentVal)) select.value = currentVal; }
 
@@ -362,13 +390,11 @@
             let matchPair = (fPair === 'ALL') || (t.pair === fPair); let matchPos = (fPos === 'ALL') || (t.type === fPos); let status = t.result || 'PENDING'; let matchRes = (fRes === 'ALL') || (status === fRes);
             if (matchPair && matchPos && matchRes) {
                 let actionHtml = t.result==='WIN'?`<span style="color:#00e676;font-weight:bold;">WIN</span>`: t.result==='LOSS'?`<span style="color:#ff1744;font-weight:bold;">LOSS</span>`:`<button class="btn-mini" onclick="openDateModal(${index},'WIN')" style="color:#66bb6a">W</button><button class="btn-mini" onclick="openDateModal(${index},'LOSS')" style="color:#ef5350">L</button>`;
-                
                 let plColor = '#ccc'; if (t.result === 'WIN') plColor = '#66bb6a'; else if (t.result === 'LOSS') plColor = '#ef5350';
                 let plText = t.result ? (t.result === 'WIN' ? `+${Number(t.realPL).toFixed(1)}` : `${Number(t.realPL).toFixed(1)}`) : '--';
                 let durText = (t.result && t.closeTime) ? formatDuration(t.closeTime - t.id) : "--";
                 
-                // Lưu ý: data-id là ID thực của lệnh để dùng cho việc xóa/sửa
-                let row = `<tr><td><input type="checkbox" class="row-check" data-id="${t.id}" style="width:auto"></td><td>${t.time}</td><td class="pair-link" onclick="loadTrade(${index})" title="Load lại lệnh này">${t.pair}</td><td class="${t.type==='LONG'?'pl-win':'pl-loss'}">${t.type}</td><td>${t.entry}</td><td>${t.sl}</td><td>${t.tp||''}</td><td>${Number(t.vol).toLocaleString()}</td><td>${t.lev}</td><td>${actionHtml}</td><td style="color:${plColor}; font-weight:bold;">${plText}</td><td class="col-duration">${durText}</td><td><input type="text" class="note-input" value="${t.note||''}" placeholder="..." onchange="updateNote(${index},this.value)"></td></tr>`;
+                let row = `<tr><td><input type="checkbox" class="row-check" data-id="${t.id}" data-index="${index}" style="width:auto"></td><td>${t.time}</td><td class="pair-link" onclick="loadTrade(${index})" title="Load lại lệnh này">${t.pair}</td><td class="${t.type==='LONG'?'pl-win':'pl-loss'}">${t.type}</td><td>${t.entry}</td><td>${t.sl}</td><td>${t.tp||''}</td><td>${Number(t.vol).toLocaleString()}</td><td>${t.lev}</td><td>${actionHtml}</td><td style="color:${plColor}; font-weight:bold;">${plText}</td><td class="col-duration">${durText}</td><td><input type="text" class="note-input" value="${t.note||''}" placeholder="..." onchange="updateNote(${index},this.value)"></td></tr>`;
                 tbody.innerHTML += row;
             }
         }); document.getElementById('selectAll').checked=false;
@@ -381,10 +407,28 @@
         document.getElementById('riskUSD').value = t.risk;
         updateRiskFromUSD(); window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+
+    // --- KHÔI PHỤC TÍNH NĂNG EXPORT EXCEL ---
+    function exportToExcel() {
+        if(tradeData.length == 0) return;
+        let csv = "\uFEFFTime,Pair,Type,Entry,SL,TP,Vol($),Lev,Res,PL($),Duration,Note\n";
+        tradeData.forEach(t => {
+            let dur = (t.result && t.closeTime) ? formatDuration(t.closeTime - t.id) : "--";
+            let pl = t.result ? Number(t.realPL).toFixed(2) : 0;
+            // Thay dấu phẩy bằng khoảng trắng để tránh lỗi cột CSV
+            let note = (t.note || "").replace(/,/g, " ");
+            csv += `${t.time},${t.pair},${t.type},${t.entry},${t.sl},${t.tp},${t.vol},${t.lev},${t.result||'PENDING'},${pl},${dur},${note}\n`;
+        });
+        
+        let link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+        link.download = `TradeLog_${getCurrentTimeString().replace(/[:\s/]/g,'_')}.csv`;
+        link.click();
+    }
     
     window.onload = function(){ 
         updateRiskFromPct(); 
-        fetchData(); // Tải dữ liệu từ Google Sheet khi mở web
+        fetchData(); 
     }
 </script>
 </body>
